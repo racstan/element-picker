@@ -45,45 +45,6 @@
   right: 0;
 }
 
-/* Enhanced Mode: ancestors (amber, dashed) — clickable, so pointer-events are on */
-.ep-ancestor-box {
-  position: absolute;
-  z-index: 2147482997;
-  pointer-events: auto;
-  cursor: pointer;
-  border: 1.5px dashed #f59e0b;
-  background: rgba(245, 158, 11, 0.05);
-  box-sizing: border-box;
-  display: none;
-  border-radius: 2px;
-  transition: opacity 0.1s;
-}
-
-/* Enhanced Mode: descendants (teal, dotted) — clickable, different color per user request */
-.ep-descendant-box {
-  position: absolute;
-  z-index: 2147482996;
-  pointer-events: auto;
-  cursor: pointer;
-  border: 1.5px dotted #14b8a6;
-  background: rgba(20, 184, 166, 0.06);
-  box-sizing: border-box;
-  display: none;
-  border-radius: 2px;
-  transition: opacity 0.1s;
-}
-
-.ep-ancestor-box.ep-outline-hot {
-  border-style: solid;
-  opacity: 1 !important;
-  background: rgba(245, 158, 11, 0.16);
-}
-
-.ep-descendant-box.ep-outline-hot {
-  border-style: solid;
-  opacity: 1 !important;
-  background: rgba(20, 184, 166, 0.16);
-}
 
 .ep-select-box {
   position: absolute;
@@ -336,59 +297,6 @@ html.ep-active body {
   transform: translateX(15px);
 }
 
-/* Ancestors/Descendants sub-toggle chips, shown only when Enhanced Mode is on */
-.ep-sub-toggles {
-  display: flex;
-  gap: 6px;
-  padding: 8px 12px;
-  border-bottom: 1px solid #eeeef1;
-}
-
-.ep-chip-toggle {
-  cursor: pointer;
-}
-
-.ep-chip-toggle input {
-  position: absolute;
-  opacity: 0;
-  width: 0;
-  height: 0;
-}
-
-.ep-chip {
-  display: inline-block;
-  font-size: 11px;
-  font-weight: 600;
-  padding: 4px 9px;
-  border-radius: 12px;
-  border: 1.5px solid transparent;
-  opacity: 0.4;
-  transition: opacity 0.12s;
-}
-
-.ep-chip-toggle input:checked + .ep-chip {
-  opacity: 1;
-}
-
-.ep-chip-amber {
-  color: #b45309;
-  background: rgba(245, 158, 11, 0.14);
-  border-color: #f59e0b;
-}
-
-.ep-chip-teal {
-  color: #0f766e;
-  background: rgba(20, 184, 166, 0.14);
-  border-color: #14b8a6;
-}
-
-.ep-enhanced-hint {
-  font-size: 10.5px;
-  color: #8b8b93;
-  display: flex;
-  align-items: center;
-  margin-left: auto;
-}
 
 .ep-panel-list {
   padding: 4px 0;
@@ -574,8 +482,6 @@ html.ep-active body {
   .ep-mode-btn { background: #2c2c33; color: #d0d0d5; border-color: #3a3a42; }
   .ep-mode-btn.ep-mode-active { background: #3b82f6; border-color: #3b82f6; color: #fff; }
   .ep-switch-track { background: #3a3a42; }
-  .ep-sub-toggles { border-bottom-color: #2c2c33; }
-  .ep-enhanced-hint { color: #8b8b93; border-bottom-color: #2c2c33; }
   .ep-panel-empty { color: #6b6b73; }
   .ep-list-row:hover { background: #26262e; }
   .ep-list-label { color: #f2f2f5; }

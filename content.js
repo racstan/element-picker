@@ -32,18 +32,12 @@
   // ---------------------------------------
 
   let active = false;
-  let enhanced = false;       // Enhanced Mode master toggle
-  let showAncestors = true;   // Enhanced Mode sub-toggle
-  let showDescendants = true; // Enhanced Mode sub-toggle
-  let ancestorLimit = 8;
-  let descendantLimit = 12;
+
   let multiSelect = true;     // multi-select vs single-select mode
   let targetMode = "aiPrompt";
   let cleanMode = false;
   let panelExpanded = false;
   let hoverEl = null;         // the primary hovered element (under the cursor)
-  let hoverAncestor = null;   // an ancestor outline currently moused-over (clickable target)
-  let hoverDescendant = null; // a descendant outline currently moused-over (clickable target)
   const selected = new Map(); // el -> { id }
 
   // ---------- overlay elements ----------
@@ -56,27 +50,7 @@
   hoverBox.appendChild(hoverLabel);
   hoverBox.appendChild(hoverCode);
 
-  // Pools of ancestor/descendant boxes for Enhanced Mode, reused across hovers to avoid
-  // constant DOM churn while the mouse moves. Each pooled box tracks which real DOM
-  // element it currently represents via a WeakMap-free direct property, so clicks on
-  // the overlay can resolve back to the actual page element.
-  const ancestorPool = [];
-  const descendantPool = [];
 
-  function getPooledBox(pool, i, className) {
-    if (pool[i]) return pool[i];
-    const box = document.createElement("div");
-    box.className = className;
-    document.body.appendChild(box);
-    pool[i] = box;
-    return box;
-  }
-  function hidePoolFrom(pool, i) {
-    for (; i < pool.length; i++) {
-      pool[i].style.display = "none";
-      pool[i]._epTarget = null;
-    }
-  }
   function positionBox(box, el) {
     const rect = el.getBoundingClientRect();
     box.style.top = `${rect.top + window.scrollY}px`;
@@ -106,19 +80,7 @@
         </label>
       </div>
 
-      <div class="ep-sub-toggles" style="display:none; align-items:center;">
-        <label class="ep-chip-toggle">
-          <input type="checkbox" class="ep-show-ancestors" />
-          <span class="ep-chip ep-chip-amber">Ancestors</span>
-        </label>
-        <input type="number" class="ep-num-ancestors" value="8" min="0" max="50" style="width:36px; height:20px; font-size:11px; padding:0 2px; border:1px solid #ccc; border-radius:4px; margin-right:8px;" title="Ancestor limit" />
 
-        <label class="ep-chip-toggle">
-          <input type="checkbox" class="ep-show-descendants" />
-          <span class="ep-chip ep-chip-teal">Descendants</span>
-        </label>
-        <input type="number" class="ep-num-descendants" value="12" min="0" max="100" style="width:36px; height:20px; font-size:11px; padding:0 2px; border:1px solid #ccc; border-radius:4px;" title="Descendant limit" />
-      </div>
 
       <div class="ep-panel-list"></div>
       <div class="ep-panel-empty">Click any element on the page to select it.</div>
@@ -159,13 +121,7 @@
         <option>No element selected</option>
       </select>
       
-      <label class="ep-toolbar-toggle" title="Enhanced Mode (reveal structure)">
-        <span class="ep-switch">
-          <input type="checkbox" class="ep-enhanced-checkbox" />
-          <span class="ep-switch-track"><span class="ep-switch-thumb"></span></span>
-        </span>
-        <span style="font-size: 11px; margin-left: 6px; font-weight: 500;">Enhanced Mode</span>
-      </label>
+
 
       <div class="ep-toolbar-divider"></div>
 
@@ -257,7 +213,6 @@
     selected.clear();
     renderList();
     renderSelectionBoxes();
-    refreshEnhancedOverlaysForSelection();
     updateBottomToolbar();
   }
 
@@ -365,10 +320,6 @@
 
   async function buildElementBlock(el, i) {
     let nodesToCopy = [el];
-    if (enhanced) {
-      if (showAncestors) nodesToCopy.push(...collectAncestors(el));
-      if (showDescendants) nodesToCopy.push(...collectDescendants(el).map(d => d.node));
-    }
 
     if (targetMode === "aiPrompt") {
       const info = await getReactInfo(el);
@@ -705,7 +656,6 @@
           if (active) {
             panel.style.display = "flex";
             renderSelectionBoxes();
-            refreshEnhancedOverlaysForSelection();
           }
 
           if (blob) {
@@ -720,7 +670,6 @@
         if (active) {
           panel.style.display = "flex";
           renderSelectionBoxes();
-          refreshEnhancedOverlaysForSelection();
         }
         reject(err);
       }
@@ -743,7 +692,6 @@
     renderList();
     renderSelectionBoxes();
     pulseLastSelectionBox();
-    refreshEnhancedOverlaysForSelection();
     updateBottomToolbar();
   }
 
@@ -787,19 +735,6 @@
       copyBtn.disabled = true;
       screenshotBtn.disabled = true;
       if (clearBtn) clearBtn.disabled = true;
-    }
-  }
-
-  function refreshEnhancedOverlaysForSelection() {
-    if (!enhanced) {
-      clearEnhancedOverlays();
-      return;
-    }
-    const els = Array.from(selected.keys());
-    if (els.length > 0) {
-      refreshEnhancedOverlays(els[els.length - 1]);
-    } else {
-      clearEnhancedOverlays();
     }
   }
 
@@ -922,7 +857,6 @@
         renumber();
         renderList();
         renderSelectionBoxes();
-        refreshEnhancedOverlaysForSelection();
         updateBottomToolbar();
       });
       row.addEventListener("mouseenter", () => {
@@ -931,96 +865,9 @@
       list.appendChild(row);
     });
   }
-
-  // ---------- enhanced mode: ancestor + descendant outlines ----------
-  function collectAncestors(el) {
-    const chain = [];
-    let node = el.parentElement;
-    while (node && node !== document.body && node !== document.documentElement && chain.length < ancestorLimit) {
-      chain.push(node);
-      node = node.parentElement;
-    }
-    return chain;
-  }
-
-  function collectDescendants(el) {
-    const result = [];
-    const queue = [];
-    if (!el || !el.children) return result;
-    for (let i = 0; i < el.children.length && i < descendantLimit; i++) {
-      queue.push({ node: el.children[i], depth: 0 });
-    }
-    while (queue.length && result.length < descendantLimit) {
-      const { node, depth } = queue.shift();
-      result.push({ node, depth });
-      if (depth < 3 && node.children) {
-        for (let i = 0; i < node.children.length && queue.length < descendantLimit; i++) {
-          queue.push({ node: node.children[i], depth: depth + 1 });
-        }
-      }
-    }
-    return result;
-  }
-
-  function renderAncestorChain(el) {
-    if (!showAncestors) {
-      hidePoolFrom(ancestorPool, 0);
-      return;
-    }
-    const chain = collectAncestors(el);
-    chain.forEach((ancestor, i) => {
-      const box = getPooledBox(ancestorPool, i, "ep-ancestor-box");
-      positionBox(box, ancestor);
-      const opacity = Math.max(0.18, 0.7 - i * 0.08);
-      box.style.opacity = String(opacity);
-      box.style.display = "block";
-      box._epTarget = ancestor;
-    });
-    hidePoolFrom(ancestorPool, chain.length);
-  }
-
-  function renderDescendantTree(el) {
-    if (!showDescendants) {
-      hidePoolFrom(descendantPool, 0);
-      return;
-    }
-    const items = collectDescendants(el);
-    items.forEach(({ node, depth }, i) => {
-      const box = getPooledBox(descendantPool, i, "ep-descendant-box");
-      positionBox(box, node);
-      const opacity = Math.max(0.25, 0.75 - depth * 0.15);
-      box.style.opacity = String(opacity);
-      box.style.display = "block";
-      box._epTarget = node;
-    });
-    hidePoolFrom(descendantPool, items.length);
-  }
-
-  function clearEnhancedOverlays() {
-    hidePoolFrom(ancestorPool, 0);
-    hidePoolFrom(descendantPool, 0);
-    hoverAncestor = null;
-    hoverDescendant = null;
-  }
-
-  function refreshEnhancedOverlays(el) {
-    if (!enhanced || !el) {
-      clearEnhancedOverlays();
-      return;
-    }
-    renderAncestorChain(el);
-    renderDescendantTree(el);
-  }
-
   function isExtensionUiTarget(target) {
     return Boolean(target && target.closest && target.closest(
       ".ep-shell, .ep-hover-box, .ep-select-box"
-    ));
-  }
-
-  function isEnhancedOverlayTarget(target) {
-    return Boolean(target && target.closest && target.closest(
-      ".ep-ancestor-box, .ep-descendant-box"
     ));
   }
 
@@ -1029,40 +876,19 @@
     if (!active) return;
     if (isExtensionUiTarget(e.target)) {
       hoverEl = null;
-      hoverAncestor = null;
-      hoverDescendant = null;
       hoverBox.style.display = "none";
       return;
     }
 
     if (cleanMode) {
       hoverBox.style.display = "none";
-      hoverAncestor = null;
-      hoverDescendant = null;
       const el = document.elementFromPoint(e.clientX, e.clientY);
       if (!el || panel.contains(el) || el === hoverBox || hoverBox.contains(el) || el.closest(".ep-select-box")) return;
       hoverEl = el;
       return;
     }
 
-    // While in Enhanced Mode, check whether the cursor is over one of the ancestor/
-    // descendant overlay boxes (they're on top, pointer-events enabled for this reason)
-    // so we can highlight it as a clickable target.
-    if (enhanced) {
-      const isAncestor = isEnhancedOverlayTarget(e.target) && ancestorPool.includes(e.target);
-      const isDescendant = isEnhancedOverlayTarget(e.target) && descendantPool.includes(e.target);
-      
-      ancestorPool.forEach((b) => b.classList.toggle("ep-outline-hot", b === e.target));
-      descendantPool.forEach((b) => b.classList.toggle("ep-outline-hot", b === e.target));
-      
-      hoverAncestor = isAncestor ? e.target._epTarget : null;
-      hoverDescendant = isDescendant ? e.target._epTarget : null;
-      
-      if (isAncestor || isDescendant) {
-        hoverBox.style.display = "none";
-        return; // don't also update the main hover box while pointing at a chain overlay
-      }
-    }
+
 
     const el = document.elementFromPoint(e.clientX, e.clientY);
     if (!el || panel.contains(el) || el === hoverBox || hoverBox.contains(el)) return;
@@ -1091,14 +917,7 @@
     if (!e.isTrusted) return;
     if (isExtensionUiTarget(e.target)) return;
 
-    // Clicking directly on an ancestor/descendant overlay selects THAT element instead
-    // of whatever's under the main cursor point.
-    if (enhanced && (hoverAncestor || hoverDescendant)) {
-      e.preventDefault();
-      e.stopPropagation();
-      selectElement(hoverAncestor || hoverDescendant);
-      return;
-    }
+
 
     e.preventDefault();
     e.stopPropagation();
@@ -1124,7 +943,6 @@
   function onScrollOrResize() {
     if (active) {
       renderSelectionBoxes();
-      if (enhanced && hoverEl) refreshEnhancedOverlays(hoverEl);
     }
   }
 
@@ -1181,42 +999,13 @@
     }
   });
 
-  const enhancedCheckbox = panel.querySelector(".ep-enhanced-checkbox");
   const cleanModeCheckbox = panel.querySelector(".ep-clean-mode-checkbox");
-  const subToggles = panel.querySelector(".ep-sub-toggles");
-  const showAncestorsBox = panel.querySelector(".ep-show-ancestors");
-  const showDescendantsBox = panel.querySelector(".ep-show-descendants");
-  const numAncestors = panel.querySelector(".ep-num-ancestors");
-  const numDescendants = panel.querySelector(".ep-num-descendants");
 
   cleanModeCheckbox.addEventListener("change", () => {
     cleanMode = cleanModeCheckbox.checked;
     if (cleanMode) {
       hoverBox.style.display = "none";
-      clearEnhancedOverlays();
     }
-  });
-
-  enhancedCheckbox.addEventListener("change", () => {
-    enhanced = enhancedCheckbox.checked;
-    subToggles.style.display = enhanced ? "flex" : "none";
-    refreshEnhancedOverlaysForSelection();
-  });
-  showAncestorsBox.addEventListener("change", () => {
-    showAncestors = showAncestorsBox.checked;
-    refreshEnhancedOverlaysForSelection();
-  });
-  showDescendantsBox.addEventListener("change", () => {
-    showDescendants = showDescendantsBox.checked;
-    refreshEnhancedOverlaysForSelection();
-  });
-  numAncestors.addEventListener("change", (e) => {
-    ancestorLimit = Math.max(0, parseInt(e.target.value) || 0);
-    refreshEnhancedOverlaysForSelection();
-  });
-  numDescendants.addEventListener("change", (e) => {
-    descendantLimit = Math.max(0, parseInt(e.target.value) || 0);
-    refreshEnhancedOverlaysForSelection();
   });
 
   function setActive(next) {
@@ -1226,7 +1015,6 @@
     panel.style.display = active ? "flex" : "none";
     if (!active) {
       hoverEl = null;
-      clearEnhancedOverlays();
       clearAllSelected();
       document.querySelectorAll(".ep-select-box").forEach(el => el.remove());
     } else {
