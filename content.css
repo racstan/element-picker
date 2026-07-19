@@ -245,13 +245,6 @@ html.ep-active body {
   padding: 12px;
 }
 
-.ep-panel-count {
-  font-size: 11px;
-  color: #6b6b73;
-  background: #ececf0;
-  padding: 2px 8px;
-  border-radius: 10px;
-}
 
 .ep-icon-btn {
   background: transparent;
@@ -569,7 +562,6 @@ html.ep-active body {
   .ep-panel-content { border-bottom-color: #2c2c33; }
   .ep-target-select { color: #d0d0d5; }
   .ep-toolbar-divider { background: #2c2c33; }
-  .ep-panel-count { color: #a1a1aa; background: #2c2c33; }
   .ep-icon-btn { color: #a1a1aa; }
   .ep-icon-btn:hover { color: #fff; }
   .ep-mode-btn { background: #2c2c33; color: #d0d0d5; border-color: #3a3a42; }

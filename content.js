@@ -861,9 +861,7 @@
 
   function renderList() {
     const list = panel.querySelector(".ep-panel-list");
-    const count = panel.querySelector(".ep-panel-count");
     const empty = panel.querySelector(".ep-panel-empty");
-    count.textContent = `${selected.size} selected`;
     empty.style.display = selected.size === 0 ? "block" : "none";
     list.innerHTML = "";
     selected.forEach((meta, el) => {
