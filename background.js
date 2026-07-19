@@ -81,3 +81,96 @@ chrome.tabs.onUpdated.addListener((tabId, changeInfo) => {
     setIconForTab(tabId, false);
   }
 });
+
+let offscreenCreating;
+let clipboardQueue = Promise.resolve();
+
+async function setupOffscreenDocument() {
+  const offscreenUrl = chrome.runtime.getURL("offscreen.html");
+  const existingContexts = await chrome.runtime.getContexts({
+    contextTypes: ["OFFSCREEN_DOCUMENT"],
+    documentUrls: [offscreenUrl]
+  });
+
+  if (existingContexts.length > 0) return;
+
+  if (!offscreenCreating) {
+    offscreenCreating = chrome.offscreen.createDocument({
+      url: "offscreen.html",
+      reasons: ["CLIPBOARD"],
+      justification: "Copy captured screenshots to the system clipboard."
+    }).finally(() => {
+      offscreenCreating = null;
+    });
+  }
+
+  await offscreenCreating;
+}
+
+function copyImageToClipboard(dataUrl) {
+  const operation = clipboardQueue.then(() => performImageClipboardCopy(dataUrl));
+  clipboardQueue = operation.catch(() => {});
+  return operation;
+}
+
+async function performImageClipboardCopy(dataUrl) {
+  await setupOffscreenDocument();
+
+  try {
+    return await new Promise((resolve) => {
+      chrome.runtime.sendMessage({
+        type: "EP_OFFSCREEN_COPY_IMAGE",
+        target: "offscreen",
+        dataUrl
+      }, response => {
+        if (chrome.runtime.lastError || !response) {
+          resolve({
+            ok: false,
+            error: chrome.runtime.lastError
+              ? chrome.runtime.lastError.message
+              : "No clipboard response"
+          });
+        } else {
+          resolve(response);
+        }
+      });
+    });
+  } finally {
+    if (chrome.offscreen && chrome.offscreen.closeDocument) {
+      await chrome.offscreen.closeDocument().catch(() => {});
+    }
+  }
+}
+
+chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
+  if (msg.type === "EP_CAPTURE_TAB") {
+    const windowId = (sender && sender.tab) ? sender.tab.windowId : null;
+    chrome.tabs.captureVisibleTab(windowId, { format: "png" }, (dataUrl) => {
+      if (chrome.runtime.lastError) {
+        console.error("[Element Picker] captureVisibleTab failed:", chrome.runtime.lastError.message);
+        // Fallback to null (current window) if the window ID was invalid
+        chrome.tabs.captureVisibleTab(null, { format: "png" }, (dataUrl2) => {
+          if (chrome.runtime.lastError) {
+            console.error("[Element Picker] captureVisibleTab fallback failed:", chrome.runtime.lastError.message);
+            sendResponse(null);
+          } else {
+            sendResponse(dataUrl2);
+          }
+        });
+      } else {
+        sendResponse(dataUrl);
+      }
+    });
+    return true;
+  }
+
+  if (msg.type === "EP_COPY_IMAGE_TO_CLIPBOARD") {
+    copyImageToClipboard(msg.dataUrl)
+      .then(sendResponse)
+      .catch(error => sendResponse({
+        ok: false,
+        error: error && error.message ? error.message : String(error)
+      }));
+    return true;
+  }
+});

@@ -37,7 +37,7 @@
   let descendantLimit = 12;
   let multiSelect = true;     // multi-select vs single-select mode
   let targetMode = "aiPrompt";
-  let panelExpanded = true;
+  let panelExpanded = false;
   let hoverEl = null;         // the primary hovered element (under the cursor)
   let hoverAncestor = null;   // an ancestor outline currently moused-over (clickable target)
   let hoverDescendant = null; // a descendant outline currently moused-over (clickable target)
@@ -106,7 +106,7 @@
 
       <div class="ep-toolbar-divider"></div>
 
-      <button class="ep-icon-btn ep-toggle-panel-btn" data-action="toggle-panel" title="Toggle Panel">
+      <button class="ep-icon-btn ep-toggle-panel-btn" data-action="toggle-panel" title="Toggle Panel" style="transform: rotate(-90deg)">
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9l6 6 6-6"/></svg>
       </button>
       <button class="ep-icon-btn" data-action="close" title="Turn off picker">
@@ -114,7 +114,7 @@
       </button>
     </div>
 
-    <div class="ep-panel-content">
+    <div class="ep-panel-content" style="display: none;">
       <div class="ep-mode-row">
         <button class="ep-mode-btn ep-mode-active" data-mode="multi">Multi-select</button>
         <button class="ep-mode-btn" data-mode="single">Single-select</button>
@@ -158,10 +158,25 @@
           </optgroup>
         </select>
         <button class="ep-btn ep-btn-primary" data-action="copy-all">Copy All</button>
+        <button class="ep-btn ep-btn-primary" data-action="screenshot-all">Screenshot</button>
         <button class="ep-btn ep-btn-ghost" data-action="clear">Delete all</button>
       </div>
       <div class="ep-panel-hint">Click to select &middot; click again to deselect &middot; Esc to exit</div>
     </div>
+  `;
+
+  const bottomToolbar = document.createElement("div");
+  bottomToolbar.className = "ep-bottom-toolbar";
+  bottomToolbar.innerHTML = `
+    <div class="ep-bottom-label">No element selected</div>
+    <button class="ep-btn ep-btn-primary" id="ep-bottom-copy" disabled>
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
+      Copy Code
+    </button>
+    <button class="ep-btn ep-btn-primary" id="ep-bottom-screenshot" disabled>
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"></path><circle cx="12" cy="13" r="4"></circle></svg>
+      Screenshot
+    </button>
   `;
 
   let isDragging = false;
@@ -175,6 +190,7 @@
     }
     document.body.appendChild(hoverBox);
     document.body.appendChild(panel);
+    document.body.appendChild(bottomToolbar);
 
     const dragHandle = panel.querySelector(".ep-drag-handle");
     dragHandle.addEventListener("mousedown", (e) => {
@@ -200,6 +216,18 @@
     document.addEventListener("mouseup", () => {
       isDragging = false;
     }, true);
+
+    bottomToolbar.querySelector("#ep-bottom-copy").addEventListener("click", async (e) => {
+      e.stopPropagation();
+      e.preventDefault();
+      await copyAllSelected();
+    });
+
+    bottomToolbar.querySelector("#ep-bottom-screenshot").addEventListener("click", async (e) => {
+      e.stopPropagation();
+      e.preventDefault();
+      await captureAllScreenshots();
+    });
   }
 
   // ---------- helpers ----------
@@ -409,6 +437,35 @@
     }
   }
 
+  function blobToDataUrl(blob) {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result);
+      reader.onerror = () => reject(reader.error || new Error("Failed to read screenshot"));
+      reader.readAsDataURL(blob);
+    });
+  }
+
+  function requestImageClipboard(dataUrl) {
+    return new Promise((resolve) => {
+      chrome.runtime.sendMessage({
+        type: "EP_COPY_IMAGE_TO_CLIPBOARD",
+        dataUrl
+      }, response => {
+        if (chrome.runtime.lastError || !response) {
+          resolve({
+            ok: false,
+            error: chrome.runtime.lastError
+              ? chrome.runtime.lastError.message
+              : "No clipboard response"
+          });
+        } else {
+          resolve(response);
+        }
+      });
+    });
+  }
+
   function flashPanelMessage(msg) {
     const hint = panel.querySelector(".ep-panel-hint");
     const original = hint.textContent;
@@ -418,6 +475,211 @@
       hint.textContent = original;
       hint.classList.remove("ep-flash");
     }, 1400);
+  }
+
+  async function copyAllSelected() {
+    const els = Array.from(selected.keys());
+    if (els.length === 0) {
+      flashPanelMessage("No elements selected.");
+      return;
+    }
+    const separator = (targetMode === "both" || targetMode === "aiPrompt") ? "\n\n---\n\n" : "\n\n";
+    const blocks = await Promise.all(els.map((el, i) => buildElementBlock(el, i)));
+    const text = blocks.join(separator);
+    const ok = await copyToClipboard(text);
+    flashPanelMessage(ok ? (els.length > 1 ? "All copied!" : "Copied!") : "Copy failed.");
+  }
+
+  async function copyOrDownloadScreenshot(els) {
+    if (!els || els.length === 0) {
+      flashPanelMessage("No elements to capture.");
+      return;
+    }
+
+    let blob;
+    try {
+      blob = await captureElementsBlob(els);
+    } catch (captureErr) {
+      console.error("Capture error:", captureErr);
+      flashPanelMessage("Capture failed!");
+      return;
+    }
+
+    // Write through the extension's offscreen document so the result is the
+    // system clipboard, not a content-script/page clipboard context.
+    try {
+      const clipboardResult = await requestImageClipboard(await blobToDataUrl(blob));
+      if (clipboardResult && clipboardResult.ok) {
+        flashPanelMessage(els.length > 1 ? "Screenshots copied!" : "Screenshot copied!");
+        return;
+      }
+      console.warn("Clipboard write failed, falling back to download:", clipboardResult && clipboardResult.error);
+    } catch (clipErr) {
+      console.warn("Clipboard write failed, falling back to download:", clipErr);
+    }
+
+    // Fallback: save as file
+    try {
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = els.length > 1
+        ? `ep-screenshots-${Date.now()}.png`
+        : `ep-screenshot-${Date.now()}.png`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+      flashPanelMessage("Saved as file!");
+    } catch (dlErr) {
+      console.error("Download fallback failed:", dlErr);
+      flashPanelMessage("Screenshot failed!");
+    }
+  }
+
+  async function captureAllScreenshots() {
+    const els = Array.from(selected.keys());
+    await copyOrDownloadScreenshot(els);
+  }
+
+  function captureElementsBlob(els) {
+    return new Promise(async (resolve, reject) => {
+      if (!els || els.length === 0) {
+        reject(new Error("No elements to capture"));
+        return;
+      }
+
+      // Hide UI
+      panel.style.display = "none";
+      if (typeof bottomToolbar !== "undefined") bottomToolbar.style.display = "none";
+      hoverBox.style.display = "none";
+      document.querySelectorAll(".ep-select-box").forEach(b => b.style.display = "none");
+      clearEnhancedOverlays();
+
+      const croppedCanvases = [];
+      const origScroll = document.documentElement.style.scrollBehavior;
+      document.documentElement.style.scrollBehavior = "auto";
+
+      try {
+        for (const el of els) {
+          el.scrollIntoView({ block: "center", inline: "center" });
+          await new Promise(r => setTimeout(r, 150));
+
+          const rect = el.getBoundingClientRect();
+          const dpr = window.devicePixelRatio || 1;
+
+          const dataUrl = await new Promise((resMsg, rejMsg) => {
+            chrome.runtime.sendMessage({ type: "EP_CAPTURE_TAB" }, res => {
+              if (chrome.runtime.lastError || !res) {
+                rejMsg(new Error("Capture failed"));
+              } else {
+                resMsg(res);
+              }
+            });
+          });
+
+          await new Promise((resImg, rejImg) => {
+            const img = new Image();
+            img.onload = () => {
+              const canvas = document.createElement("canvas");
+              const cropX = Math.max(0, rect.left * dpr);
+              const cropY = Math.max(0, rect.top * dpr);
+              const cropW = Math.min(img.width - cropX, rect.width * dpr);
+              const cropH = Math.min(img.height - cropY, rect.height * dpr);
+
+              if (cropW <= 0 || cropH <= 0) {
+                resImg();
+                return;
+              }
+
+              canvas.width = cropW;
+              canvas.height = cropH;
+              const ctx = canvas.getContext("2d");
+              ctx.drawImage(img, cropX, cropY, cropW, cropH, 0, 0, cropW, cropH);
+              croppedCanvases.push(canvas);
+              resImg();
+            };
+            img.onerror = () => rejImg(new Error("Image failed to load"));
+            img.src = dataUrl;
+          });
+        }
+
+        document.documentElement.style.scrollBehavior = origScroll;
+
+        if (croppedCanvases.length === 0) {
+          throw new Error("No elements were successfully captured");
+        }
+
+        // Stitch together
+        const gap = 16;
+        let totalHeight = 0;
+        let maxWidth = 0;
+
+        for (const canvas of croppedCanvases) {
+          totalHeight += canvas.height;
+          if (canvas.width > maxWidth) {
+            maxWidth = canvas.width;
+          }
+        }
+        totalHeight += gap * (croppedCanvases.length - 1);
+
+        const padding = 16;
+        const finalWidth = maxWidth + padding * 2;
+        const finalHeight = totalHeight + padding * 2;
+
+        const masterCanvas = document.createElement("canvas");
+        masterCanvas.width = finalWidth;
+        masterCanvas.height = finalHeight;
+        const ctx = masterCanvas.getContext("2d");
+
+        ctx.fillStyle = "#f3f4f6";
+        ctx.fillRect(0, 0, finalWidth, finalHeight);
+
+        let currentY = padding;
+        for (const canvas of croppedCanvases) {
+          const xOffset = padding + (maxWidth - canvas.width) / 2;
+          
+          ctx.shadowColor = "rgba(0, 0, 0, 0.15)";
+          ctx.shadowBlur = 8;
+          ctx.shadowOffsetX = 0;
+          ctx.shadowOffsetY = 4;
+          
+          ctx.drawImage(canvas, xOffset, currentY);
+          
+          ctx.shadowColor = "transparent";
+          ctx.shadowBlur = 0;
+          ctx.shadowOffsetX = 0;
+          ctx.shadowOffsetY = 0;
+
+          currentY += canvas.height + gap;
+        }
+
+        masterCanvas.toBlob(blob => {
+          if (active) {
+            panel.style.display = "flex";
+            if (typeof bottomToolbar !== "undefined") bottomToolbar.style.display = "flex";
+            renderSelectionBoxes();
+            refreshEnhancedOverlaysForSelection();
+          }
+
+          if (blob) {
+            resolve(blob);
+          } else {
+            reject(new Error("Failed to generate blob from stitched canvas"));
+          }
+        }, "image/png");
+
+      } catch (err) {
+        document.documentElement.style.scrollBehavior = origScroll;
+        if (active) {
+          panel.style.display = "flex";
+          if (typeof bottomToolbar !== "undefined") bottomToolbar.style.display = "flex";
+          renderSelectionBoxes();
+          refreshEnhancedOverlaysForSelection();
+        }
+        reject(err);
+      }
+    });
   }
 
   // ---------- selection logic ----------
@@ -436,6 +698,34 @@
     renderSelectionBoxes();
     pulseLastSelectionBox();
     refreshEnhancedOverlaysForSelection();
+    updateBottomToolbar();
+  }
+
+  function updateBottomToolbar() {
+    const els = Array.from(selected.keys());
+    const copyBtn = bottomToolbar.querySelector("#ep-bottom-copy");
+    const screenshotBtn = bottomToolbar.querySelector("#ep-bottom-screenshot");
+    const label = bottomToolbar.querySelector(".ep-bottom-label");
+
+    if (els.length > 0) {
+      if (els.length === 1) {
+        label.textContent = `Selected: ${shortLabel(els[0])}`;
+        copyBtn.innerHTML = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg> Copy Code`;
+        screenshotBtn.innerHTML = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"></path><circle cx="12" cy="13" r="4"></circle></svg> Screenshot`;
+      } else {
+        label.textContent = `${els.length} elements selected`;
+        copyBtn.innerHTML = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg> Copy All`;
+        screenshotBtn.innerHTML = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"></path><circle cx="12" cy="13" r="4"></circle></svg> Screenshot All`;
+      }
+      copyBtn.disabled = false;
+      screenshotBtn.disabled = false;
+    } else {
+      label.textContent = "No element selected";
+      copyBtn.innerHTML = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg> Copy Code`;
+      screenshotBtn.innerHTML = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"></path><circle cx="12" cy="13" r="4"></circle></svg> Screenshot`;
+      copyBtn.disabled = true;
+      screenshotBtn.disabled = true;
+    }
   }
 
   function refreshEnhancedOverlaysForSelection() {
@@ -515,6 +805,18 @@
       });
       box.appendChild(copyBtn);
 
+      // Floating screenshot button
+      const screenshotBtn = document.createElement("button");
+      screenshotBtn.className = "ep-select-screenshot-btn";
+      screenshotBtn.title = "Take screenshot";
+      screenshotBtn.innerHTML = `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"></path><circle cx="12" cy="13" r="4"></circle></svg>`;
+      screenshotBtn.addEventListener("click", async (e) => {
+        e.stopPropagation();
+        e.preventDefault();
+        await copyOrDownloadScreenshot([el]);
+      });
+      box.appendChild(screenshotBtn);
+
       document.body.appendChild(box);
     });
 
@@ -539,6 +841,9 @@
         <button class="ep-list-copy" title="Copy Info">
           <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
         </button>
+        <button class="ep-list-screenshot" title="Screenshot">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"></path><circle cx="12" cy="13" r="4"></circle></svg>
+        </button>
         <button class="ep-list-remove" title="Remove">&times;</button>
       `;
       row.querySelector(".ep-list-copy").addEventListener("click", async (e) => {
@@ -547,6 +852,10 @@
         const ok = await copyToClipboard(text);
         flashPanelMessage(ok ? "Element copied!" : "Copy failed.");
       });
+      row.querySelector(".ep-list-screenshot").addEventListener("click", async (e) => {
+        e.stopPropagation();
+        await copyOrDownloadScreenshot([el]);
+      });
       row.querySelector(".ep-list-remove").addEventListener("click", (e) => {
         e.stopPropagation();
         selected.delete(el);
@@ -554,6 +863,7 @@
         renderList();
         renderSelectionBoxes();
         refreshEnhancedOverlaysForSelection();
+        updateBottomToolbar();
       });
       row.addEventListener("mouseenter", () => {
         el.scrollIntoView({ block: "center", behavior: "smooth" });
@@ -666,7 +976,7 @@
     }
 
     const el = document.elementFromPoint(e.clientX, e.clientY);
-    if (!el || panel.contains(el) || el === hoverBox || hoverBox.contains(el)) return;
+    if (!el || panel.contains(el) || bottomToolbar.contains(el) || el === hoverBox || hoverBox.contains(el)) return;
     if (el.closest(".ep-select-box")) return; // don't treat our own overlays as page elements
     if (el === hoverEl) return;
     hoverEl = el;
@@ -689,7 +999,7 @@
 
   function onClick(e) {
     if (!active) return;
-    if (panel.contains(e.target)) return;
+    if (panel.contains(e.target) || bottomToolbar.contains(e.target)) return;
     // Ignore clicks on our own overlay UI (selection boxes and their copy buttons)
     if (e.target.closest(".ep-select-box") || e.target.closest(".ep-hover-box")) return;
 
@@ -767,19 +1077,16 @@
       selected.clear();
       renderList();
       renderSelectionBoxes();
+      refreshEnhancedOverlaysForSelection();
+      updateBottomToolbar();
       return;
     }
     if (action === "copy-all") {
-      const els = Array.from(selected.keys());
-      if (els.length === 0) {
-        flashPanelMessage("No elements selected.");
-        return;
-      }
-      const separator = (targetMode === "both" || targetMode === "aiPrompt") ? "\n\n---\n\n" : "\n\n";
-      const blocks = await Promise.all(els.map((el, i) => buildElementBlock(el, i)));
-      const text = blocks.join(separator);
-      const ok = await copyToClipboard(text);
-      flashPanelMessage(ok ? "Copied!" : "Copy failed.");
+      await copyAllSelected();
+      return;
+    }
+    if (action === "screenshot-all") {
+      await captureAllScreenshots();
       return;
     }
   });
@@ -824,12 +1131,14 @@
     document.documentElement.classList.toggle("ep-active", active);
     hoverBox.style.display = "none";
     panel.style.display = active ? "flex" : "none";
+    bottomToolbar.style.display = active ? "flex" : "none";
     if (!active) {
       hoverEl = null;
       clearEnhancedOverlays();
       document.querySelectorAll(".ep-select-box").forEach(el => el.style.display = "none");
     } else {
       renderSelectionBoxes();
+      updateBottomToolbar();
     }
   }
 
