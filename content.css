@@ -597,11 +597,28 @@ html.ep-active body {
   overflow: hidden;
   text-overflow: ellipsis;
   color: #55555c;
+  background: transparent;
+  border: none;
+  outline: none;
+  cursor: pointer;
+}
+
+.ep-bottom-label:disabled {
+  cursor: default;
+}
+
+.ep-bottom-label option {
+  background: #ffffff;
+  color: #1a1a1e;
 }
 
 @media (prefers-color-scheme: dark) {
   .ep-bottom-label {
     color: #a1a1aa;
+  }
+  .ep-bottom-label option {
+    background: #1e1e24;
+    color: #f2f2f5;
   }
 }
 
