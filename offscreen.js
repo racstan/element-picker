@@ -11,8 +11,34 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
 });
 
 async function copyToClipboard(dataUrl) {
-  const response = await fetch(dataUrl);
-  const blob = await response.blob();
-  const item = new ClipboardItem({ "image/png": blob });
-  await navigator.clipboard.write([item]);
+  return new Promise((resolve, reject) => {
+    const img = document.createElement("img");
+    img.onload = () => {
+      document.body.appendChild(img);
+      
+      const selection = window.getSelection();
+      const range = document.createRange();
+      range.selectNode(img);
+      selection.removeAllRanges();
+      selection.addRange(range);
+      
+      let success = false;
+      try {
+        success = document.execCommand("copy");
+      } catch (e) {
+        success = false;
+      }
+      
+      selection.removeAllRanges();
+      document.body.removeChild(img);
+      
+      if (success) {
+        resolve();
+      } else {
+        reject(new Error("execCommand('copy') failed"));
+      }
+    };
+    img.onerror = () => reject(new Error("Failed to load image"));
+    img.src = dataUrl;
+  });
 }

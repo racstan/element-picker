@@ -538,6 +538,24 @@
 
   async function captureAllScreenshots() {
     const els = Array.from(selected.keys());
+    if (els.length === 0) {
+      flashPanelMessage("No elements to capture.");
+      return;
+    }
+
+    if (navigator.clipboard && window.ClipboardItem) {
+      try {
+        const blobPromise = captureElementsBlob(els);
+        await navigator.clipboard.write([
+          new window.ClipboardItem({ "image/png": blobPromise })
+        ]);
+        flashPanelMessage(els.length > 1 ? "Screenshots copied!" : "Screenshot copied!");
+        return;
+      } catch (err) {
+        console.warn("Synchronous Promise-based clipboard write failed:", err);
+      }
+    }
+
     await copyOrDownloadScreenshot(els);
   }
 
