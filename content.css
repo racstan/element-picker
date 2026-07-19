@@ -174,31 +174,31 @@ html.ep-active body {
 }
 
 /* ---------- Container & Toolbar: light by default, following system preference ---------- */
-.ep-container {
+.ep-shell {
   display: none;
-  flex-direction: column;
+  flex-direction: column-reverse;
   position: fixed;
-  top: 16px;
-  right: 16px;
-  width: 340px;
+  bottom: 20px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 540px;
   background: #ffffff;
   color: #1a1a1e;
   border: 1px solid #e5e5e9;
-  border-radius: 10px;
-  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.16);
+  border-radius: 12px;
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.15);
   z-index: 2147483647;
   font: 13px/1.4 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  overflow: hidden;
 }
 
 .ep-toolbar {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 8px 12px;
+  gap: 10px;
+  padding: 6px 12px;
   background: #f7f7f9;
-  border-bottom: 1px solid #e5e5e9;
   user-select: none;
-  border-radius: 10px 10px 0 0;
 }
 
 .ep-drag-handle {
@@ -240,7 +240,9 @@ html.ep-active body {
 .ep-panel-content {
   display: block;
   overflow-y: auto;
-  max-height: 80vh;
+  max-height: 50vh;
+  border-bottom: 1px solid #e5e5e9;
+  padding: 12px;
 }
 
 .ep-panel-count {
@@ -558,12 +560,13 @@ html.ep-active body {
 
 /* ---------- Dark mode: follow system preference ---------- */
 @media (prefers-color-scheme: dark) {
-  .ep-container {
+  .ep-shell {
     background: #1e1e24;
     color: #f2f2f5;
     border-color: #2c2c33;
   }
-  .ep-toolbar { background: #17171b; border-bottom-color: #2c2c33; }
+  .ep-toolbar { background: #17171b; }
+  .ep-panel-content { border-bottom-color: #2c2c33; }
   .ep-target-select { color: #d0d0d5; }
   .ep-toolbar-divider { background: #2c2c33; }
   .ep-panel-count { color: #a1a1aa; background: #2c2c33; }
@@ -593,37 +596,11 @@ html.ep-active body {
   .ep-select-copy-btn:hover { background: #2563eb; }
 }
 
-.ep-bottom-toolbar {
-  display: none;
-  position: fixed;
-  bottom: 20px;
-  left: 50%;
-  transform: translateX(-50%);
-  background: #ffffff;
-  border: 1px solid #e5e5e9;
-  border-radius: 50px;
-  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.15);
-  padding: 8px 12px;
-  align-items: center;
-  gap: 12px;
-  z-index: 2147483647;
-  font: 13px/1.4 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-  color: #1a1a1e;
-}
-
-@media (prefers-color-scheme: dark) {
-  .ep-bottom-toolbar {
-    background: #1e1e24;
-    border-color: #2c2c33;
-    color: #f2f2f5;
-  }
-}
-
 .ep-bottom-label {
   font-weight: 500;
   font-size: 12px;
   padding-left: 8px;
-  max-width: 200px;
+  max-width: 140px;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -636,15 +613,15 @@ html.ep-active body {
   }
 }
 
-.ep-bottom-toolbar .ep-btn {
+.ep-toolbar .ep-btn {
   display: flex;
   align-items: center;
   gap: 6px;
-  border-radius: 20px;
-  padding: 8px 16px;
+  border-radius: 6px;
+  padding: 6px 12px;
 }
 
-.ep-bottom-toolbar .ep-btn:disabled {
+.ep-toolbar .ep-btn:disabled {
   opacity: 0.5;
   cursor: not-allowed;
   pointer-events: none;

@@ -10,8 +10,10 @@
       const id = Math.random().toString(36).substr(2, 9);
       el.setAttribute("data-ep-temp", id);
       
+      let timer;
       const listener = (e) => {
         if (e.data.type === "EP_RES_REACT_INFO" && e.data.id === id) {
+          if (timer) clearTimeout(timer);
           window.removeEventListener("message", listener);
           el.removeAttribute("data-ep-temp");
           resolve({ compName: e.data.compName, source: e.data.source });
@@ -20,7 +22,7 @@
       window.addEventListener("message", listener);
       window.postMessage({ type: "EP_REQ_REACT_INFO", id }, "*");
       
-      setTimeout(() => {
+      timer = setTimeout(() => {
         window.removeEventListener("message", listener);
         el.removeAttribute("data-ep-temp");
         resolve({ compName: null, source: null });
@@ -83,37 +85,8 @@
   }
 
   const panel = document.createElement("div");
-  panel.className = "ep-container";
+  panel.className = "ep-shell";
   panel.innerHTML = `
-    <div class="ep-toolbar">
-      <div class="ep-drag-handle" title="Drag to move">
-        <svg width="10" height="16" viewBox="0 0 10 16" fill="currentColor">
-          <circle cx="2" cy="2" r="1.5"/><circle cx="2" cy="8" r="1.5"/><circle cx="2" cy="14" r="1.5"/>
-          <circle cx="8" cy="2" r="1.5"/><circle cx="8" cy="8" r="1.5"/><circle cx="8" cy="14" r="1.5"/>
-        </svg>
-      </div>
-      <div class="ep-toolbar-title">Picker <span class="ep-panel-count">0</span></div>
-      
-      <div class="ep-toolbar-divider"></div>
-      
-      <label class="ep-toolbar-toggle" title="Enhanced Mode (reveal structure)">
-        <span class="ep-switch">
-          <input type="checkbox" class="ep-enhanced-checkbox" />
-          <span class="ep-switch-track"><span class="ep-switch-thumb"></span></span>
-        </span>
-        <span style="font-size: 11px; margin-left: 6px; font-weight: 500;">Enhanced Mode</span>
-      </label>
-
-      <div class="ep-toolbar-divider"></div>
-
-      <button class="ep-icon-btn ep-toggle-panel-btn" data-action="toggle-panel" title="Toggle Panel" style="transform: rotate(-90deg)">
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9l6 6 6-6"/></svg>
-      </button>
-      <button class="ep-icon-btn" data-action="close" title="Turn off picker">
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6L6 18M6 6l12 12"/></svg>
-      </button>
-    </div>
-
     <div class="ep-panel-content" style="display: none;">
       <div class="ep-mode-row">
         <button class="ep-mode-btn ep-mode-active" data-mode="multi">Multi-select</button>
@@ -157,29 +130,51 @@
             <option value="text">Text Content</option>
           </optgroup>
         </select>
-        <button class="ep-btn ep-btn-primary" data-action="copy-all">Copy All</button>
-        <button class="ep-btn ep-btn-primary" data-action="screenshot-all">Screenshot</button>
         <button class="ep-btn ep-btn-ghost" data-action="clear">Delete all</button>
       </div>
       <div class="ep-panel-hint">Click to select &middot; click again to deselect &middot; Esc to exit</div>
     </div>
-  `;
 
-  const bottomToolbar = document.createElement("div");
-  bottomToolbar.className = "ep-bottom-toolbar";
-  bottomToolbar.innerHTML = `
-    <div class="ep-bottom-label">No element selected</div>
-    <button class="ep-btn ep-btn-primary" id="ep-bottom-copy" disabled>
-      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
-      Copy Code
-    </button>
-    <button class="ep-btn ep-btn-primary" id="ep-bottom-screenshot" disabled>
-      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"></path><circle cx="12" cy="13" r="4"></circle></svg>
-      Screenshot
-    </button>
-    <button class="ep-btn ep-btn-ghost" id="ep-bottom-clear" disabled>
-      Clear
-    </button>
+    <div class="ep-toolbar">
+      <div class="ep-drag-handle" title="Drag to move">
+        <svg width="10" height="16" viewBox="0 0 10 16" fill="currentColor">
+          <circle cx="2" cy="2" r="1.5"/><circle cx="2" cy="8" r="1.5"/><circle cx="2" cy="14" r="1.5"/>
+          <circle cx="8" cy="2" r="1.5"/><circle cx="8" cy="8" r="1.5"/><circle cx="8" cy="14" r="1.5"/>
+        </svg>
+      </div>
+      <div class="ep-bottom-label">No element selected</div>
+      
+      <label class="ep-toolbar-toggle" title="Enhanced Mode (reveal structure)">
+        <span class="ep-switch">
+          <input type="checkbox" class="ep-enhanced-checkbox" />
+          <span class="ep-switch-track"><span class="ep-switch-thumb"></span></span>
+        </span>
+        <span style="font-size: 11px; margin-left: 6px; font-weight: 500;">Enhanced Mode</span>
+      </label>
+
+      <div class="ep-toolbar-divider"></div>
+
+      <button class="ep-btn ep-btn-primary" id="ep-bottom-copy" disabled>
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
+        Copy Code
+      </button>
+      <button class="ep-btn ep-btn-primary" id="ep-bottom-screenshot" disabled>
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"></path><circle cx="12" cy="13" r="4"></circle></svg>
+        Screenshot
+      </button>
+      <button class="ep-btn ep-btn-ghost" id="ep-bottom-clear" disabled>
+        Clear
+      </button>
+
+      <div class="ep-toolbar-divider"></div>
+
+      <button class="ep-icon-btn ep-toggle-panel-btn" data-action="toggle-panel" title="Toggle Panel" style="transform: rotate(180deg)">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 15l-6-6-6 6"/></svg>
+      </button>
+      <button class="ep-icon-btn" data-action="close" title="Turn off picker">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6L6 18M6 6l12 12"/></svg>
+      </button>
+    </div>
   `;
 
   let isDragging = false;
@@ -193,7 +188,6 @@
     }
     document.body.appendChild(hoverBox);
     document.body.appendChild(panel);
-    document.body.appendChild(bottomToolbar);
 
     const dragHandle = panel.querySelector(".ep-drag-handle");
     dragHandle.addEventListener("mousedown", (e) => {
@@ -201,6 +195,11 @@
       dragStartX = e.clientX;
       dragStartY = e.clientY;
       const rect = panel.getBoundingClientRect();
+      panel.style.transform = "none";
+      panel.style.left = `${rect.left}px`;
+      panel.style.top = `${rect.top}px`;
+      panel.style.bottom = "auto";
+      panel.style.right = "auto";
       initialLeft = rect.left;
       initialTop = rect.top;
       e.preventDefault();
@@ -220,19 +219,19 @@
       isDragging = false;
     }, true);
 
-    bottomToolbar.querySelector("#ep-bottom-copy").addEventListener("click", async (e) => {
+    panel.querySelector("#ep-bottom-copy").addEventListener("click", async (e) => {
       e.stopPropagation();
       e.preventDefault();
       await copyAllSelected();
     });
 
-    bottomToolbar.querySelector("#ep-bottom-screenshot").addEventListener("click", async (e) => {
+    panel.querySelector("#ep-bottom-screenshot").addEventListener("click", async (e) => {
       e.stopPropagation();
       e.preventDefault();
       await captureAllScreenshots();
     });
 
-    bottomToolbar.querySelector("#ep-bottom-clear").addEventListener("click", (e) => {
+    panel.querySelector("#ep-bottom-clear").addEventListener("click", (e) => {
       e.stopPropagation();
       e.preventDefault();
       clearAllSelected();
@@ -585,7 +584,6 @@
 
       // Hide UI
       panel.style.display = "none";
-      if (typeof bottomToolbar !== "undefined") bottomToolbar.style.display = "none";
       hoverBox.style.display = "none";
       document.querySelectorAll(".ep-select-box").forEach(b => b.style.display = "none");
       clearEnhancedOverlays();
@@ -691,7 +689,6 @@
         masterCanvas.toBlob(blob => {
           if (active) {
             panel.style.display = "flex";
-            if (typeof bottomToolbar !== "undefined") bottomToolbar.style.display = "flex";
             renderSelectionBoxes();
             refreshEnhancedOverlaysForSelection();
           }
@@ -707,7 +704,6 @@
         document.documentElement.style.scrollBehavior = origScroll;
         if (active) {
           panel.style.display = "flex";
-          if (typeof bottomToolbar !== "undefined") bottomToolbar.style.display = "flex";
           renderSelectionBoxes();
           refreshEnhancedOverlaysForSelection();
         }
@@ -738,28 +734,28 @@
 
   function updateBottomToolbar() {
     const els = Array.from(selected.keys());
-    const copyBtn = bottomToolbar.querySelector("#ep-bottom-copy");
-    const screenshotBtn = bottomToolbar.querySelector("#ep-bottom-screenshot");
-    const clearBtn = bottomToolbar.querySelector("#ep-bottom-clear");
-    const label = bottomToolbar.querySelector(".ep-bottom-label");
+    const copyBtn = panel.querySelector("#ep-bottom-copy");
+    const screenshotBtn = panel.querySelector("#ep-bottom-screenshot");
+    const clearBtn = panel.querySelector("#ep-bottom-clear");
+    const label = panel.querySelector(".ep-bottom-label");
 
     if (els.length > 0) {
       if (els.length === 1) {
         label.textContent = `Selected: ${shortLabel(els[0])}`;
-        copyBtn.innerHTML = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg> Copy Code`;
-        screenshotBtn.innerHTML = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"></path><circle cx="12" cy="13" r="4"></circle></svg> Screenshot`;
+        copyBtn.innerHTML = `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg> Copy Code`;
+        screenshotBtn.innerHTML = `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"></path><circle cx="12" cy="13" r="4"></circle></svg> Screenshot`;
       } else {
-        label.textContent = `${els.length} elements selected`;
-        copyBtn.innerHTML = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg> Copy All`;
-        screenshotBtn.innerHTML = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"></path><circle cx="12" cy="13" r="4"></circle></svg> Screenshot All`;
+        label.textContent = `${els.length} selected`;
+        copyBtn.innerHTML = `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg> Copy All`;
+        screenshotBtn.innerHTML = `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"></path><circle cx="12" cy="13" r="4"></circle></svg> Screenshot All`;
       }
       copyBtn.disabled = false;
       screenshotBtn.disabled = false;
       if (clearBtn) clearBtn.disabled = false;
     } else {
       label.textContent = "No element selected";
-      copyBtn.innerHTML = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg> Copy Code`;
-      screenshotBtn.innerHTML = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"></path><circle cx="12" cy="13" r="4"></circle></svg> Screenshot`;
+      copyBtn.innerHTML = `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg> Copy Code`;
+      screenshotBtn.innerHTML = `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"></path><circle cx="12" cy="13" r="4"></circle></svg> Screenshot`;
       copyBtn.disabled = true;
       screenshotBtn.disabled = true;
       if (clearBtn) clearBtn.disabled = true;
@@ -992,8 +988,7 @@
 
   function isExtensionUiTarget(target) {
     return Boolean(target && target.closest && target.closest(
-      ".ep-container, .ep-bottom-toolbar, .ep-hover-box, " +
-      ".ep-select-box"
+      ".ep-shell, .ep-hover-box, .ep-select-box"
     ));
   }
 
@@ -1034,7 +1029,7 @@
     }
 
     const el = document.elementFromPoint(e.clientX, e.clientY);
-    if (!el || panel.contains(el) || bottomToolbar.contains(el) || el === hoverBox || hoverBox.contains(el)) return;
+    if (!el || panel.contains(el) || el === hoverBox || hoverBox.contains(el)) return;
     if (el.closest(".ep-select-box")) return; // don't treat our own overlays as page elements
     if (el === hoverEl) return;
     hoverEl = el;
@@ -1123,7 +1118,7 @@
     if (action === "toggle-panel") {
       panelExpanded = !panelExpanded;
       panel.querySelector(".ep-panel-content").style.display = panelExpanded ? "block" : "none";
-      panel.querySelector(".ep-toggle-panel-btn").style.transform = panelExpanded ? "rotate(0deg)" : "rotate(-90deg)";
+      panel.querySelector(".ep-toggle-panel-btn").style.transform = panelExpanded ? "rotate(0deg)" : "rotate(180deg)";
       return;
     }
     if (action === "close") {
@@ -1184,11 +1179,11 @@
     document.documentElement.classList.toggle("ep-active", active);
     hoverBox.style.display = "none";
     panel.style.display = active ? "flex" : "none";
-    bottomToolbar.style.display = active ? "flex" : "none";
     if (!active) {
       hoverEl = null;
       clearEnhancedOverlays();
-      document.querySelectorAll(".ep-select-box").forEach(el => el.style.display = "none");
+      clearAllSelected();
+      document.querySelectorAll(".ep-select-box").forEach(el => el.remove());
     } else {
       renderSelectionBoxes();
       updateBottomToolbar();
