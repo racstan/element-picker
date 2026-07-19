@@ -11,7 +11,11 @@ const ICONS = {
 };
 
 function setIconForTab(tabId, active) {
-  chrome.action.setIcon({ tabId, path: active ? ICONS.green : ICONS.red });
+  chrome.action.setIcon({ tabId, path: active ? ICONS.green : ICONS.red }, () => {
+    if (chrome.runtime.lastError) {
+      // Ignore: Tab was likely closed before the icon could be updated
+    }
+  });
 }
 
 function toggleOnActiveTab() {
