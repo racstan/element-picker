@@ -173,4 +173,20 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
       }));
     return true;
   }
+
+  if (msg.type === "EP_DOWNLOAD_IMAGE") {
+    chrome.downloads.download({
+      url: msg.dataUrl,
+      filename: msg.filename,
+      saveAs: false
+    }, (downloadId) => {
+      if (chrome.runtime.lastError) {
+        console.error("[Element Picker] download failed:", chrome.runtime.lastError.message);
+        sendResponse({ ok: false, error: chrome.runtime.lastError.message });
+      } else {
+        sendResponse({ ok: true, downloadId });
+      }
+    });
+    return true;
+  }
 });

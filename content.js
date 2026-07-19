@@ -122,13 +122,13 @@
 
       <div class="ep-sub-toggles" style="display:none; align-items:center;">
         <label class="ep-chip-toggle">
-          <input type="checkbox" class="ep-show-ancestors" checked />
+          <input type="checkbox" class="ep-show-ancestors" />
           <span class="ep-chip ep-chip-amber">Ancestors</span>
         </label>
         <input type="number" class="ep-num-ancestors" value="8" min="0" max="50" style="width:36px; height:20px; font-size:11px; padding:0 2px; border:1px solid #ccc; border-radius:4px; margin-right:8px;" title="Ancestor limit" />
 
         <label class="ep-chip-toggle">
-          <input type="checkbox" class="ep-show-descendants" checked />
+          <input type="checkbox" class="ep-show-descendants" />
           <span class="ep-chip ep-chip-teal">Descendants</span>
         </label>
         <input type="number" class="ep-num-descendants" value="12" min="0" max="100" style="width:36px; height:20px; font-size:11px; padding:0 2px; border:1px solid #ccc; border-radius:4px;" title="Descendant limit" />
@@ -176,6 +176,9 @@
     <button class="ep-btn ep-btn-primary" id="ep-bottom-screenshot" disabled>
       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"></path><circle cx="12" cy="13" r="4"></circle></svg>
       Screenshot
+    </button>
+    <button class="ep-btn ep-btn-ghost" id="ep-bottom-clear" disabled>
+      Clear
     </button>
   `;
 
@@ -228,6 +231,20 @@
       e.preventDefault();
       await captureAllScreenshots();
     });
+
+    bottomToolbar.querySelector("#ep-bottom-clear").addEventListener("click", (e) => {
+      e.stopPropagation();
+      e.preventDefault();
+      clearAllSelected();
+    });
+  }
+
+  function clearAllSelected() {
+    selected.clear();
+    renderList();
+    renderSelectionBoxes();
+    refreshEnhancedOverlaysForSelection();
+    updateBottomToolbar();
   }
 
   // ---------- helpers ----------
@@ -505,32 +522,49 @@
       return;
     }
 
-    // Write through the extension's offscreen document so the result is the
-    // system clipboard, not a content-script/page clipboard context.
+    // Try clipboard locally first. If capture took < 1s, the user gesture is still active!
+    if (navigator.clipboard && window.ClipboardItem) {
+      try {
+        await navigator.clipboard.write([
+          new window.ClipboardItem({ "image/png": blob })
+        ]);
+        flashPanelMessage(els.length > 1 ? "Screenshots copied!" : "Screenshot copied!");
+        return;
+      } catch (clipErr) {
+        console.warn("Local clipboard write failed, trying offscreen document:", clipErr);
+      }
+    }
+
+    // Try offscreen document as secondary clipboard fallback
     try {
       const clipboardResult = await requestImageClipboard(await blobToDataUrl(blob));
       if (clipboardResult && clipboardResult.ok) {
         flashPanelMessage(els.length > 1 ? "Screenshots copied!" : "Screenshot copied!");
         return;
       }
-      console.warn("Clipboard write failed, falling back to download:", clipboardResult && clipboardResult.error);
-    } catch (clipErr) {
-      console.warn("Clipboard write failed, falling back to download:", clipErr);
+      console.warn("Offscreen clipboard failed, falling back to download:", clipboardResult && clipboardResult.error);
+    } catch (offscreenErr) {
+      console.warn("Offscreen clipboard error, falling back to download:", offscreenErr);
     }
 
-    // Fallback: save as file
+    // Fallback: save as file using background downloads API which is extremely robust and bypasses size limits
     try {
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = els.length > 1
+      const dataUrl = await blobToDataUrl(blob);
+      const filename = els.length > 1
         ? `ep-screenshots-${Date.now()}.png`
         : `ep-screenshot-${Date.now()}.png`;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      setTimeout(() => URL.revokeObjectURL(url), 1000);
-      flashPanelMessage("Saved as file!");
+      chrome.runtime.sendMessage({
+        type: "EP_DOWNLOAD_IMAGE",
+        dataUrl,
+        filename
+      }, response => {
+        if (chrome.runtime.lastError || !response || !response.ok) {
+          console.error("Download fallback failed:", chrome.runtime.lastError || (response && response.error));
+          flashPanelMessage("Screenshot failed!");
+        } else {
+          flashPanelMessage("Saved as file!");
+        }
+      });
     } catch (dlErr) {
       console.error("Download fallback failed:", dlErr);
       flashPanelMessage("Screenshot failed!");
@@ -685,6 +719,7 @@
   // ---------- selection logic ----------
   function selectElement(el) {
     if (!el || el === document.body || el === document.documentElement) return;
+    if (isExtensionUiTarget(el)) return;
     if (selected.has(el)) {
       selected.delete(el);
     } else {
@@ -705,6 +740,7 @@
     const els = Array.from(selected.keys());
     const copyBtn = bottomToolbar.querySelector("#ep-bottom-copy");
     const screenshotBtn = bottomToolbar.querySelector("#ep-bottom-screenshot");
+    const clearBtn = bottomToolbar.querySelector("#ep-bottom-clear");
     const label = bottomToolbar.querySelector(".ep-bottom-label");
 
     if (els.length > 0) {
@@ -719,12 +755,14 @@
       }
       copyBtn.disabled = false;
       screenshotBtn.disabled = false;
+      if (clearBtn) clearBtn.disabled = false;
     } else {
       label.textContent = "No element selected";
       copyBtn.innerHTML = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg> Copy Code`;
       screenshotBtn.innerHTML = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"></path><circle cx="12" cy="13" r="4"></circle></svg> Screenshot`;
       copyBtn.disabled = true;
       screenshotBtn.disabled = true;
+      if (clearBtn) clearBtn.disabled = true;
     }
   }
 
@@ -952,16 +990,36 @@
     renderDescendantTree(el);
   }
 
+  function isExtensionUiTarget(target) {
+    return Boolean(target && target.closest && target.closest(
+      ".ep-container, .ep-bottom-toolbar, .ep-hover-box, " +
+      ".ep-select-box"
+    ));
+  }
+
+  function isEnhancedOverlayTarget(target) {
+    return Boolean(target && target.closest && target.closest(
+      ".ep-ancestor-box, .ep-descendant-box"
+    ));
+  }
+
   // ---------- event handlers ----------
   function onMouseMove(e) {
     if (!active) return;
+    if (isExtensionUiTarget(e.target)) {
+      hoverEl = null;
+      hoverAncestor = null;
+      hoverDescendant = null;
+      hoverBox.style.display = "none";
+      return;
+    }
 
     // While in Enhanced Mode, check whether the cursor is over one of the ancestor/
     // descendant overlay boxes (they're on top, pointer-events enabled for this reason)
     // so we can highlight it as a clickable target.
     if (enhanced) {
-      const isAncestor = ancestorPool.includes(e.target);
-      const isDescendant = descendantPool.includes(e.target);
+      const isAncestor = isEnhancedOverlayTarget(e.target) && ancestorPool.includes(e.target);
+      const isDescendant = isEnhancedOverlayTarget(e.target) && descendantPool.includes(e.target);
       
       ancestorPool.forEach((b) => b.classList.toggle("ep-outline-hot", b === e.target));
       descendantPool.forEach((b) => b.classList.toggle("ep-outline-hot", b === e.target));
@@ -999,9 +1057,8 @@
 
   function onClick(e) {
     if (!active) return;
-    if (panel.contains(e.target) || bottomToolbar.contains(e.target)) return;
-    // Ignore clicks on our own overlay UI (selection boxes and their copy buttons)
-    if (e.target.closest(".ep-select-box") || e.target.closest(".ep-hover-box")) return;
+    if (!e.isTrusted) return;
+    if (isExtensionUiTarget(e.target)) return;
 
     // Clicking directly on an ancestor/descendant overlay selects THAT element instead
     // of whatever's under the main cursor point.
@@ -1074,11 +1131,7 @@
       return;
     }
     if (action === "clear") {
-      selected.clear();
-      renderList();
-      renderSelectionBoxes();
-      refreshEnhancedOverlaysForSelection();
-      updateBottomToolbar();
+      clearAllSelected();
       return;
     }
     if (action === "copy-all") {
