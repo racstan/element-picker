@@ -39,6 +39,7 @@
   let descendantLimit = 12;
   let multiSelect = true;     // multi-select vs single-select mode
   let targetMode = "aiPrompt";
+  let cleanMode = false;
   let panelExpanded = false;
   let hoverEl = null;         // the primary hovered element (under the cursor)
   let hoverAncestor = null;   // an ancestor outline currently moused-over (clickable target)
@@ -82,6 +83,11 @@
     box.style.left = `${rect.left + window.scrollX}px`;
     box.style.width = `${rect.width}px`;
     box.style.height = `${rect.height}px`;
+    if (rect.left > window.innerWidth - 150) {
+      box.classList.add("ep-align-right");
+    } else {
+      box.classList.remove("ep-align-right");
+    }
   }
 
   const panel = document.createElement("div");
@@ -91,6 +97,13 @@
       <div class="ep-mode-row">
         <button class="ep-mode-btn ep-mode-active" data-mode="multi">Multi-select</button>
         <button class="ep-mode-btn" data-mode="single">Single-select</button>
+        <label class="ep-toolbar-toggle" style="margin-left:auto;" title="Hide hover boxes (click directly selects)">
+          <span class="ep-switch">
+            <input type="checkbox" class="ep-clean-mode-checkbox" />
+            <span class="ep-switch-track"><span class="ep-switch-thumb"></span></span>
+          </span>
+          <span style="font-size: 11px; margin-left: 6px; font-weight: 500;">Clean Mode</span>
+        </label>
       </div>
 
       <div class="ep-sub-toggles" style="display:none; align-items:center;">
@@ -1022,6 +1035,16 @@
       return;
     }
 
+    if (cleanMode) {
+      hoverBox.style.display = "none";
+      hoverAncestor = null;
+      hoverDescendant = null;
+      const el = document.elementFromPoint(e.clientX, e.clientY);
+      if (!el || panel.contains(el) || el === hoverBox || hoverBox.contains(el) || el.closest(".ep-select-box")) return;
+      hoverEl = el;
+      return;
+    }
+
     // While in Enhanced Mode, check whether the cursor is over one of the ancestor/
     // descendant overlay boxes (they're on top, pointer-events enabled for this reason)
     // so we can highlight it as a clickable target.
@@ -1159,11 +1182,20 @@
   });
 
   const enhancedCheckbox = panel.querySelector(".ep-enhanced-checkbox");
+  const cleanModeCheckbox = panel.querySelector(".ep-clean-mode-checkbox");
   const subToggles = panel.querySelector(".ep-sub-toggles");
   const showAncestorsBox = panel.querySelector(".ep-show-ancestors");
   const showDescendantsBox = panel.querySelector(".ep-show-descendants");
   const numAncestors = panel.querySelector(".ep-num-ancestors");
   const numDescendants = panel.querySelector(".ep-num-descendants");
+
+  cleanModeCheckbox.addEventListener("change", () => {
+    cleanMode = cleanModeCheckbox.checked;
+    if (cleanMode) {
+      hoverBox.style.display = "none";
+      clearEnhancedOverlays();
+    }
+  });
 
   enhancedCheckbox.addEventListener("change", () => {
     enhanced = enhancedCheckbox.checked;
