@@ -32,7 +32,6 @@
   // ---------------------------------------
 
   let active = false;
-
   let multiSelect = true;     // multi-select vs single-select mode
   let targetMode = "aiPrompt";
   let cleanMode = false;
@@ -49,7 +48,6 @@
   hoverCode.className = "ep-hover-code";
   hoverBox.appendChild(hoverLabel);
   hoverBox.appendChild(hoverCode);
-
 
   function positionBox(box, el) {
     const rect = el.getBoundingClientRect();
@@ -79,8 +77,6 @@
           <span style="font-size: 11px; margin-left: 6px; font-weight: 500;">Clean Mode</span>
         </label>
       </div>
-
-
 
       <div class="ep-panel-list"></div>
       <div class="ep-panel-empty">Click any element on the page to select it.</div>
@@ -121,8 +117,6 @@
         <option>No element selected</option>
       </select>
       
-
-
       <div class="ep-toolbar-divider"></div>
 
       <button class="ep-btn ep-btn-primary" id="ep-bottom-copy" disabled>
@@ -320,6 +314,10 @@
 
   async function buildElementBlock(el, i) {
     let nodesToCopy = [el];
+    if (enhanced) {
+      if (showAncestors) nodesToCopy.push(...collectAncestors(el));
+      if (showDescendants) nodesToCopy.push(...collectDescendants(el).map(d => d.node));
+    }
 
     if (targetMode === "aiPrompt") {
       const info = await getReactInfo(el);
@@ -538,24 +536,6 @@
 
   async function captureAllScreenshots() {
     const els = Array.from(selected.keys());
-    if (els.length === 0) {
-      flashPanelMessage("No elements to capture.");
-      return;
-    }
-
-    if (navigator.clipboard && window.ClipboardItem) {
-      try {
-        const blobPromise = captureElementsBlob(els);
-        await navigator.clipboard.write([
-          new window.ClipboardItem({ "image/png": blobPromise })
-        ]);
-        flashPanelMessage(els.length > 1 ? "Screenshots copied!" : "Screenshot copied!");
-        return;
-      } catch (err) {
-        console.warn("Synchronous Promise-based clipboard write failed:", err);
-      }
-    }
-
     await copyOrDownloadScreenshot(els);
   }
 
@@ -674,6 +654,7 @@
           if (active) {
             panel.style.display = "flex";
             renderSelectionBoxes();
+            refreshEnhancedOverlaysForSelection();
           }
 
           if (blob) {
@@ -688,6 +669,7 @@
         if (active) {
           panel.style.display = "flex";
           renderSelectionBoxes();
+          refreshEnhancedOverlaysForSelection();
         }
         reject(err);
       }
@@ -710,6 +692,7 @@
     renderList();
     renderSelectionBoxes();
     pulseLastSelectionBox();
+    refreshEnhancedOverlaysForSelection();
     updateBottomToolbar();
   }
 
@@ -883,6 +866,7 @@
       list.appendChild(row);
     });
   }
+
   function isExtensionUiTarget(target) {
     return Boolean(target && target.closest && target.closest(
       ".ep-shell, .ep-hover-box, .ep-select-box"
@@ -905,8 +889,6 @@
       hoverEl = el;
       return;
     }
-
-
 
     const el = document.elementFromPoint(e.clientX, e.clientY);
     if (!el || panel.contains(el) || el === hoverBox || hoverBox.contains(el)) return;
@@ -934,8 +916,6 @@
     if (!active) return;
     if (!e.isTrusted) return;
     if (isExtensionUiTarget(e.target)) return;
-
-
 
     e.preventDefault();
     e.stopPropagation();
