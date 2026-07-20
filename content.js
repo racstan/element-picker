@@ -314,10 +314,6 @@
 
   async function buildElementBlock(el, i) {
     let nodesToCopy = [el];
-    if (enhanced) {
-      if (showAncestors) nodesToCopy.push(...collectAncestors(el));
-      if (showDescendants) nodesToCopy.push(...collectDescendants(el).map(d => d.node));
-    }
 
     if (targetMode === "aiPrompt") {
       const info = await getReactInfo(el);
@@ -654,7 +650,6 @@
           if (active) {
             panel.style.display = "flex";
             renderSelectionBoxes();
-            refreshEnhancedOverlaysForSelection();
           }
 
           if (blob) {
@@ -669,7 +664,6 @@
         if (active) {
           panel.style.display = "flex";
           renderSelectionBoxes();
-          refreshEnhancedOverlaysForSelection();
         }
         reject(err);
       }
@@ -692,7 +686,6 @@
     renderList();
     renderSelectionBoxes();
     pulseLastSelectionBox();
-    refreshEnhancedOverlaysForSelection();
     updateBottomToolbar();
   }
 
